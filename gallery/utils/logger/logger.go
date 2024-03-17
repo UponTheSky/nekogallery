@@ -10,20 +10,10 @@ import (
 //
 // This will be assigned to http.Server.ErrorLog, so the type is *log.Logger.
 func NewServerErrorLogger(w io.Writer, level slog.Level) *log.Logger {
-	return nil
+	return slog.NewLogLogger(slog.NewTextHandler(w, nil), level)
 }
 
-// The logger handling incoming *http.Request instances.
-func NewRequestLogger() {
-
-}
-
-// The logger handling outgoing *http.Response instances.
-func NewResponseLogger() {
-
-}
-
-// The logger handling internal service events.
-func NewSystemLogger() {
-
+// The logger handling general structured logs
+func NewSLogger(w io.Writer, level slog.Level) *slog.Logger {
+	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: level}))
 }
