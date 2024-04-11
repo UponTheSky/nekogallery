@@ -1,6 +1,7 @@
 package server
 
 import (
+	"io"
 	"log"
 	"time"
 )
@@ -12,6 +13,7 @@ type Config struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	ErrorLogger       *log.Logger
+	LoggerWriter      io.Writer
 }
 
 func NewConfig() *Config {
@@ -25,6 +27,7 @@ func (c *Config) Init(
 	writeTimeout,
 	idleTimeout string,
 	errorLogger *log.Logger,
+	loggerWriter io.Writer,
 ) {
 	c.Host = host
 	c.Port = port
@@ -51,4 +54,6 @@ func (c *Config) Init(
 	c.IdleTimeout = iTimeout
 
 	c.ErrorLogger = errorLogger
+
+	c.LoggerWriter = loggerWriter
 }

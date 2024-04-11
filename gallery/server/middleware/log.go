@@ -2,13 +2,13 @@ package middleware
 
 import (
 	"gallery/utils/logger"
+	"io"
 	"log/slog"
 	"net/http"
-	"os"
 )
 
-func NewLogMiddleware(handler http.Handler) http.Handler {
-	requestLogger := logger.NewSLogger(os.Stdout, slog.LevelDebug)
+func NewLogMiddleware(handler http.Handler, w io.Writer) http.Handler {
+	requestLogger := logger.NewSLogger(w, slog.LevelDebug)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// log request
