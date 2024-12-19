@@ -55,7 +55,23 @@ impl Default for Pagination {
     }
 }
 
-async fn get_all_cats(pagination: Option<Query<Pagination>>) -> Json<Vec<Cat>> {
+#[derive(Deserialize)]
+struct Filter {
+    name: String,
+}
+
+impl Default for Filter {
+    fn default() -> Self {
+        Self {
+            name: String::from(""),
+        }
+    }
+}
+
+async fn get_all_cats(
+    pagination: Option<Query<Pagination>>,
+    filter: Option<Query<Filter>>,
+) -> Json<Vec<Cat>> {
     let cat1: Cat = Cat {
         id: Uuid::new_v4(),
         name: "miyako".to_string(),
@@ -67,14 +83,19 @@ async fn get_all_cats(pagination: Option<Query<Pagination>>) -> Json<Vec<Cat>> {
     };
 
     let cats = vec![cat1, cat2];
+
     let Query(pagination) = pagination.unwrap_or_default();
     let offset = pagination.offset;
     let limit = pagination.limit;
+
+    let Query(filter) = filter.unwrap_or_default();
+    let name_filter = filter.name;
 
     let fetched_cats = cats
         .into_iter()
         .skip(offset)
         .take(limit)
+        .filter(|cat| cat.name.contains(&name_filter))
         .collect::<Vec<Cat>>();
 
     Json(fetched_cats)
