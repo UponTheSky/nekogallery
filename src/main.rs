@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-
 use axum::{
     extract::{Path, Query},
+    http::StatusCode,
+    response::IntoResponse,
     routing::get,
     Json, Router,
 };
-
-use serde::Serialize;
 
 #[tokio::main]
 async fn main() {
@@ -19,22 +17,23 @@ async fn main() {
 fn make_app() -> Router {
     let router = Router::new();
 
-    router.route("/api/cat", get(get_all_cats))
+    router
+        .route("/api/cat", get(get_all_cats))
+        .route("/api/cat/:id", get(get_cat_by_id))
 }
 
 use serde_derive::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Clone, Serialize)]
 struct Cat {
-    id: Uuid,
+    id: u32,
     name: String,
 }
 
 impl Default for Cat {
     fn default() -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: 0,
             name: String::from("noname"),
         }
     }
@@ -68,22 +67,39 @@ impl Default for Filter {
     }
 }
 
+enum AppError {
+    NOT_FOUND,
+    INTERNAL_SERVER_ERROR,
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> axum::response::Response {
+        let (status_code, message) = match self {
+            AppError::NOT_FOUND => (StatusCode::NOT_FOUND, "resource not found"),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
+        };
+
+        (status_code, message).into_response()
+    }
+}
+
+static cats: std::sync::LazyLock<Vec<Cat>> = std::sync::LazyLock::new(|| {
+    vec![
+        Cat {
+            id: 0,
+            name: "miyako".to_string(),
+        },
+        Cat {
+            id: 1,
+            name: "shibaneko".to_string(),
+        },
+    ]
+});
+
 async fn get_all_cats(
     pagination: Option<Query<Pagination>>,
     filter: Option<Query<Filter>>,
 ) -> Json<Vec<Cat>> {
-    let cat1: Cat = Cat {
-        id: Uuid::new_v4(),
-        name: "miyako".to_string(),
-    };
-
-    let cat2: Cat = Cat {
-        id: Uuid::new_v4(),
-        name: "shibaneko".to_string(),
-    };
-
-    let cats = vec![cat1, cat2];
-
     let Query(pagination) = pagination.unwrap_or_default();
     let offset = pagination.offset;
     let limit = pagination.limit;
@@ -92,6 +108,7 @@ async fn get_all_cats(
     let name_filter = filter.name;
 
     let fetched_cats = cats
+        .clone()
         .into_iter()
         .skip(offset)
         .take(limit)
@@ -99,4 +116,12 @@ async fn get_all_cats(
         .collect::<Vec<Cat>>();
 
     Json(fetched_cats)
+}
+
+async fn get_cat_by_id(Path(id): Path<u32>) -> Result<Json<Cat>, AppError> {
+    if let Some(cat) = cats.clone().into_iter().find(|cat| cat.id == id) {
+        Ok(Json(cat))
+    } else {
+        Err(AppError::NOT_FOUND)
+    }
 }
