@@ -1,11 +1,12 @@
 use axum::{
-    extract::{Path, Query},
+    debug_handler,
+    extract::{rejection::JsonRejection, Path, Query},
     Json,
 };
 use serde_derive::Deserialize;
 
 use super::{
-    cat::{Cat, CATS},
+    cat::{Cat, CatDraft, CatUpdate, CATS},
     error::AppError,
 };
 
@@ -63,6 +64,36 @@ pub async fn get_cat_by_id(Path(id): Path<u32>) -> Result<Json<Cat>, AppError> {
     if let Some(cat) = CATS.clone().into_iter().find(|cat| cat.id == id) {
         Ok(Json(cat))
     } else {
-        Err(AppError::NotFound)
+        Err(AppError::NotFound(String::from("resource not found")))
+    }
+}
+
+#[debug_handler]
+pub async fn post_cat(Json(payload): Json<CatDraft>) -> Result<Json<Cat>, AppError> {
+    // generate a new entity here
+    // TODO: after connecting to DB, change the id to UUID
+    let new_cat = Cat {
+        id: 2,
+        name: payload.name,
+    };
+
+    Ok(Json(new_cat))
+}
+
+#[debug_handler]
+pub async fn patch_cat(
+    Path(id): Path<u32>,
+    Json(payload): Json<CatUpdate>,
+) -> Result<Json<Cat>, AppError> {
+    if let Some(cat) = CATS.clone().into_iter().find(|cat| cat.id == id) {
+        // TODO: update cat
+        let updated_cat = Cat {
+            id: cat.id,
+            name: payload.name.unwrap_or(cat.name),
+        };
+
+        Ok(Json(updated_cat))
+    } else {
+        Err(AppError::NotFound(String::from("resource not found")))
     }
 }
