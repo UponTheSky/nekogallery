@@ -1,4 +1,4 @@
-use serde_derive::Serialize;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize)]
 pub struct Cat {
@@ -13,6 +13,16 @@ impl Default for Cat {
             name: String::from("noname"),
         }
     }
+}
+
+#[derive(Deserialize)]
+pub struct CatDraft {
+    pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct CatUpdate {
+    pub name: Option<String>,
 }
 
 // for temporary usage, such as testing
