@@ -8,4 +8,5 @@ axum = { version = "0.7.9", features = ["json", "macros"] }
 serde = "1.0.216"
 serde_derive = "1.0.216"
 serde_json = "1.0.134"
+sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.42.0", features = ["full"] }
