@@ -1,14 +1,18 @@
 use axum::{
     debug_handler,
     extract::{rejection::JsonRejection, Path, Query},
+    http::StatusCode,
     Json,
 };
 use serde_derive::Deserialize;
+use sqlx::query;
 
 use super::{
     cat::{Cat, CatDraft, CatUpdate, CATS},
     error::AppError,
 };
+
+use crate::dependencies::db;
 
 #[derive(Deserialize)]
 pub struct Pagination {
@@ -41,30 +45,52 @@ impl Default for Filter {
 pub async fn get_all_cats(
     pagination: Option<Query<Pagination>>,
     filter: Option<Query<Filter>>,
-) -> Json<Vec<Cat>> {
+    db::Connection(mut conn): db::Connection,
+) -> Result<Json<Vec<Cat>>, AppError> {
+    // pagination
     let Query(pagination) = pagination.unwrap_or_default();
     let offset = pagination.offset;
     let limit = pagination.limit;
 
+    // filter
     let Query(filter) = filter.unwrap_or_default();
     let name_filter = filter.name;
 
-    let fetched_cats = CATS
-        .clone()
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .filter(|cat| cat.name.contains(&name_filter))
-        .collect::<Vec<Cat>>();
+    let mut query_builder = sqlx::QueryBuilder::new("select id, name from cat");
 
-    Json(fetched_cats)
+    if !name_filter.is_empty() {
+        query_builder.push(" where name = ").push_bind(name_filter);
+    }
+
+    query_builder
+        .push(" limit ")
+        .push_bind(limit as u32)
+        .push(" offset ")
+        .push_bind(offset as u32);
+
+    match query_builder
+        .build_query_as::<Cat>()
+        .fetch_all(&mut *conn)
+        .await
+    {
+        Ok(rows) => Ok(Json(rows)),
+        Err(err) => Err(AppError::InternalServerError(format!(
+            "internal server error: {}",
+            err
+        ))),
+    }
 }
 
-pub async fn get_cat_by_id(Path(id): Path<u32>) -> Result<Json<Cat>, AppError> {
-    if let Some(cat) = CATS.clone().into_iter().find(|cat| cat.id == id) {
-        Ok(Json(cat))
-    } else {
-        Err(AppError::NotFound(String::from("resource not found")))
+pub async fn get_cat_by_id(
+    Path(id): Path<u32>,
+    db::Connection(mut conn): db::Connection,
+) -> Result<Json<Cat>, AppError> {
+    let query =
+        sqlx::query_as::<sqlx::Sqlite, Cat>("select id, name from cat where id = ?").bind(id);
+
+    match query.fetch_one(&mut *conn).await {
+        Ok(cat) => Ok(Json(cat)),
+        Err(err) => Err(AppError::NotFound(format!("resource not found: {}", err))),
     }
 }
 
