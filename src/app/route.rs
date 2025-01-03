@@ -1,15 +1,15 @@
 use axum::{
     debug_handler,
-    extract::{rejection::JsonRejection, Path, Query},
-    http::StatusCode,
+    extract::{Path, Query},
     Json,
 };
 use serde_derive::Deserialize;
-use sqlx::query;
+use uuid::Uuid;
 
 use super::{
-    cat::{Cat, CatDraft, CatUpdate, CATS},
+    cat::{Cat, CatDraft, CatUpdate},
     error::AppError,
+    App,
 };
 
 use crate::dependencies::db;
@@ -37,7 +37,7 @@ pub struct Filter {
 impl Default for Filter {
     fn default() -> Self {
         Self {
-            name: String::from(""),
+            name: String::new(),
         }
     }
 }
@@ -82,7 +82,7 @@ pub async fn get_all_cats(
 }
 
 pub async fn get_cat_by_id(
-    Path(id): Path<u32>,
+    Path(id): Path<String>,
     db::Connection(mut conn): db::Connection,
 ) -> Result<Json<Cat>, AppError> {
     let query =
@@ -94,32 +94,55 @@ pub async fn get_cat_by_id(
     }
 }
 
-#[debug_handler]
-pub async fn post_cat(Json(payload): Json<CatDraft>) -> Result<Json<Cat>, AppError> {
-    // generate a new entity here
-    // TODO: after connecting to DB, change the id to UUID
+pub async fn post_cat(
+    db::Connection(mut conn): db::Connection,
+    Json(payload): Json<CatDraft>,
+) -> Result<Json<Cat>, AppError> {
     let new_cat = Cat {
-        id: 2,
+        id: Uuid::new_v4().to_string(),
         name: payload.name,
     };
 
-    Ok(Json(new_cat))
+    // update the DB
+    let result = sqlx::query("insert into cat (id, name) values (?, ?)")
+        .bind(Uuid::new_v4().to_string())
+        .bind(new_cat.name.clone())
+        .execute(&mut *conn)
+        .await;
+
+    match result {
+        Ok(_) => Ok(Json(new_cat)),
+        Err(err) => Err(AppError::InternalServerError(err.to_string())),
+    }
 }
 
-#[debug_handler]
 pub async fn patch_cat(
-    Path(id): Path<u32>,
+    Path(id): Path<String>,
+    db::Connection(mut conn): db::Connection,
     Json(payload): Json<CatUpdate>,
 ) -> Result<Json<Cat>, AppError> {
-    if let Some(cat) = CATS.clone().into_iter().find(|cat| cat.id == id) {
-        // TODO: update cat
-        let updated_cat = Cat {
-            id: cat.id,
-            name: payload.name.unwrap_or(cat.name),
-        };
+    let query =
+        sqlx::query_as::<sqlx::Sqlite, Cat>("select id, name from cat where id = ?").bind(id);
 
-        Ok(Json(updated_cat))
-    } else {
-        Err(AppError::NotFound(String::from("resource not found")))
+    match query.fetch_one(&mut *conn).await {
+        Ok(cat) => {
+            let updated_cat = Cat {
+                id: cat.id,
+                name: payload.name.unwrap_or(cat.name),
+            };
+
+            // update the db
+            let result = sqlx::query("update cat set name = ? where id = ?")
+                .bind(updated_cat.name.clone())
+                .bind(updated_cat.id.clone())
+                .execute(&mut *conn)
+                .await;
+
+            match result {
+                Ok(_) => Ok(Json(updated_cat)),
+                Err(err) => Err(AppError::InternalServerError(err.to_string())),
+            }
+        }
+        Err(err) => Err(AppError::NotFound(format!("resource not found: {}", err))),
     }
 }
